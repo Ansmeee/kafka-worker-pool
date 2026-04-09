@@ -1,4 +1,4 @@
-module kafka-worker-pool
+module github.com/Ansmeee/kafka-worker-pool
 
 go 1.25.4
 
