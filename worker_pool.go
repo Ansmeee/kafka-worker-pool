@@ -9,7 +9,7 @@ import (
 	"github.com/IBM/sarama"
 )
 
-type WorkerPool struct {
+type Pool struct {
 	mu       sync.RWMutex
 	wg       sync.WaitGroup
 	ctx      context.Context
@@ -19,13 +19,13 @@ type WorkerPool struct {
 	partitions  map[int32]*partition
 	taskHandler func(task *Task) error
 
-	workPoolConfig WorkerPoolConfig
+	poolConfig     PoolConfig
 	kafkaConfig    KafkaConfig
 	consumerGroup  sarama.ConsumerGroup
 	consumerHandle sarama.ConsumerGroupHandler
 }
 
-type WorkerPoolConfig struct {
+type PoolConfig struct {
 	KafkaConfig KafkaConfig
 	Handler     func(task *Task) error
 	MaxTaskSize int64
@@ -37,7 +37,7 @@ type KafkaConfig struct {
 	Group   string
 }
 
-func NewWorkerPool(config WorkerPoolConfig) (*WorkerPool, error) {
+func NewPool(config PoolConfig) (*Pool, error) {
 	kc := sarama.NewConfig()
 	kc.Consumer.Return.Errors = true
 	kc.Version = sarama.V2_0_0_0
@@ -49,23 +49,23 @@ func NewWorkerPool(config WorkerPoolConfig) (*WorkerPool, error) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	wp := &WorkerPool{
-		ctx:            ctx,
-		cancel:         cancel,
-		wg:             sync.WaitGroup{},
-		mu:             sync.RWMutex{},
-		partitions:     make(map[int32]*partition),
-		taskHandler:    config.Handler,
-		consumerGroup:  group,
-		kafkaConfig:    config.KafkaConfig,
-		workPoolConfig: config,
+	wp := &Pool{
+		ctx:           ctx,
+		cancel:        cancel,
+		wg:            sync.WaitGroup{},
+		mu:            sync.RWMutex{},
+		partitions:    make(map[int32]*partition),
+		taskHandler:   config.Handler,
+		consumerGroup: group,
+		kafkaConfig:   config.KafkaConfig,
+		poolConfig:    config,
 	}
 
 	wp.consumerHandle = &ConsumerHandler{wp: wp}
 	return wp, nil
 }
 
-func (wp *WorkerPool) Start() {
+func (wp *Pool) Start() {
 	go func() {
 		for err := range wp.consumerGroup.Errors() {
 			fmt.Println("consumer group error:", err.Error())
@@ -85,19 +85,19 @@ func (wp *WorkerPool) Start() {
 	}
 }
 
-func (wp *WorkerPool) Stop() {
+func (wp *Pool) Stop() {
 
 }
 
-func (wp *WorkerPool) dispatch(msg *sarama.ConsumerMessage, session sarama.ConsumerGroupSession) error {
+func (wp *Pool) dispatch(msg *sarama.ConsumerMessage, session sarama.ConsumerGroupSession) error {
 	part, ok := wp.partitions[msg.Partition]
 	if !ok {
 		part = &partition{
 			ctx:           wp.ctx,
 			partition:     msg.Partition,
 			topic:         msg.Topic,
-			taskQueue:     make(chan *Task, wp.workPoolConfig.MaxTaskSize),
-			dispatcher:    &dispatcher{ctx: wp.ctx, maxTaskSize: wp.workPoolConfig.MaxTaskSize, workers: make(map[string]*worker), handler: wp.taskHandler},
+			taskQueue:     make(chan *Task, wp.poolConfig.MaxTaskSize),
+			dispatcher:    &dispatcher{ctx: wp.ctx, maxTaskSize: wp.poolConfig.MaxTaskSize, workers: make(map[string]*worker), handler: wp.taskHandler},
 			offsetTracker: &offsetTracker{completed: make(map[int64]bool), initialized: false},
 		}
 

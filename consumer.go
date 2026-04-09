@@ -9,7 +9,7 @@ import (
 
 type ConsumerHandler struct {
 	ctx context.Context
-	wp  *WorkerPool
+	wp  *Pool
 }
 
 func (c *ConsumerHandler) Setup(sarama.ConsumerGroupSession) error {
