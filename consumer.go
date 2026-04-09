@@ -1,15 +1,13 @@
 package workerPool
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/IBM/sarama"
 )
 
 type ConsumerHandler struct {
-	ctx context.Context
-	wp  *Pool
+	wp *Pool
 }
 
 func (c *ConsumerHandler) Setup(sarama.ConsumerGroupSession) error {

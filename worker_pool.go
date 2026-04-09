@@ -38,6 +38,18 @@ type KafkaConfig struct {
 }
 
 func NewPool(config PoolConfig) (*Pool, error) {
+	if len(config.KafkaConfig.Brokers) == 0 || len(config.KafkaConfig.Topics) == 0 || config.KafkaConfig.Group == "" {
+		return nil, fmt.Errorf("kafka config is invalid: brokers, topics, and group are required")
+	}
+
+	if config.Handler == nil {
+		return nil, fmt.Errorf("task handler is required")
+	}
+
+	if config.MaxTaskSize <= 0 {
+		config.MaxTaskSize = 1000
+	}
+
 	kc := sarama.NewConfig()
 	kc.Consumer.Return.Errors = true
 	kc.Version = sarama.V2_0_0_0
@@ -66,7 +78,9 @@ func NewPool(config PoolConfig) (*Pool, error) {
 }
 
 func (wp *Pool) Start() {
+	wp.wg.Add(1)
 	go func() {
+		defer wp.wg.Done()
 		for err := range wp.consumerGroup.Errors() {
 			fmt.Println("consumer group error:", err.Error())
 		}
@@ -86,26 +100,67 @@ func (wp *Pool) Start() {
 }
 
 func (wp *Pool) Stop() {
+	wp.stopOnce.Do(func() {
+		wp.cancel()
+		wp.wg.Wait()
 
+		wp.mu.Lock()
+		for _, p := range wp.partitions {
+			close(p.taskQueue)
+
+			p.dispatcher.mu.Lock()
+			for _, w := range p.dispatcher.workers {
+				close(w.queue)
+			}
+			p.dispatcher.mu.Unlock()
+		}
+		wp.partitions = make(map[int32]*partition)
+		wp.mu.Unlock()
+
+		if wp.consumerGroup != nil {
+			if err := wp.consumerGroup.Close(); err != nil {
+				fmt.Println("consumer error:", err.Error())
+			}
+		}
+
+	})
 }
 
 func (wp *Pool) dispatch(msg *sarama.ConsumerMessage, session sarama.ConsumerGroupSession) error {
+	wp.mu.Lock()
 	part, ok := wp.partitions[msg.Partition]
 	if !ok {
 		part = &partition{
-			ctx:           wp.ctx,
-			partition:     msg.Partition,
-			topic:         msg.Topic,
-			taskQueue:     make(chan *Task, wp.poolConfig.MaxTaskSize),
-			dispatcher:    &dispatcher{ctx: wp.ctx, maxTaskSize: wp.poolConfig.MaxTaskSize, workers: make(map[string]*worker), handler: wp.taskHandler},
+			ctx:       wp.ctx,
+			partition: msg.Partition,
+			topic:     msg.Topic,
+			taskQueue: make(chan *Task, wp.poolConfig.MaxTaskSize),
+			dispatcher: &dispatcher{
+				ctx:         wp.ctx,
+				wg:          &wp.wg,
+				maxTaskSize: wp.poolConfig.MaxTaskSize,
+				workers:     make(map[string]*worker),
+				handler:     wp.taskHandler,
+			},
 			offsetTracker: &offsetTracker{completed: make(map[int64]bool), initialized: false},
 		}
 
 		wp.partitions[msg.Partition] = part
-		go part.consume()
+		wp.wg.Add(1)
+		go func() {
+			defer wp.wg.Done()
+			part.consume()
+		}()
 	}
+	wp.mu.Unlock()
 
-	part.taskQueue <- part.generateTask(msg, session)
+	part.offsetTracker.init(msg.Offset)
+
+	select {
+	case <-wp.ctx.Done():
+		return nil
+	case part.taskQueue <- part.generateTask(msg, session):
+	}
 
 	return nil
 }
