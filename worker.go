@@ -2,7 +2,6 @@ package workerPool
 
 import (
 	"context"
-	"fmt"
 )
 
 type worker struct {
@@ -23,17 +22,5 @@ func (w *worker) run() {
 }
 
 func (w *worker) execute(task *eventTask) {
-	defer func() {
-		if err := recover(); err != nil {
-			fmt.Printf("worker execute task panic: %v\n", err)
-			return
-		}
-	}()
-
-	err := task.handler(task.task)
-	if err != nil {
-		fmt.Println("worker execute task fail: ", err.Error())
-	}
-
-	task.callback(task.task.Msg.Offset, task.task.session, err)
+	task.callback(task.task.Msg.Offset, task.task.session, task.handler(task.task))
 }

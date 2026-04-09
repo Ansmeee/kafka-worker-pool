@@ -102,27 +102,13 @@ func (wp *Pool) Start() {
 func (wp *Pool) Stop() {
 	wp.stopOnce.Do(func() {
 		wp.cancel()
-		wp.wg.Wait()
-
-		wp.mu.Lock()
-		for _, p := range wp.partitions {
-			close(p.taskQueue)
-
-			p.dispatcher.mu.Lock()
-			for _, w := range p.dispatcher.workers {
-				close(w.queue)
-			}
-			p.dispatcher.mu.Unlock()
-		}
-		wp.partitions = make(map[int32]*partition)
-		wp.mu.Unlock()
-
 		if wp.consumerGroup != nil {
 			if err := wp.consumerGroup.Close(); err != nil {
 				fmt.Println("consumer error:", err.Error())
 			}
 		}
 
+		wp.wg.Wait()
 	})
 }
 

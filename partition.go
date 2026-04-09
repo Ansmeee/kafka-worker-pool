@@ -2,6 +2,7 @@ package workerPool
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/IBM/sarama"
@@ -41,6 +42,10 @@ func (p *partition) consume() {
 }
 
 func (p *partition) onCompletion(offset int64, session sarama.ConsumerGroupSession, err error) {
+	if err != nil {
+		fmt.Println("consumer error:", err.Error())
+	}
+
 	newOffset := p.offsetTracker.markDone(offset)
 	session.MarkOffset(p.topic, p.partition, newOffset+1, "")
 }
