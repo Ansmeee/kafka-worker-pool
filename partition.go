@@ -58,9 +58,9 @@ func (p *partition) generateTask(msg *sarama.ConsumerMessage, session sarama.Con
 	}
 
 	return &Task{
-		msg:       msg,
+		Msg:       msg,
 		session:   session,
-		eventType: eventType,
+		EventType: eventType,
 	}
 }
 
@@ -92,15 +92,15 @@ func (ot *offsetTracker) markDone(offset int64) int64 {
 
 func (dp *dispatcher) dispatch(task *Task, callback func(offset int64, session sarama.ConsumerGroupSession)) {
 	dp.mu.Lock()
-	w, ok := dp.workers[task.eventType]
+	w, ok := dp.workers[task.EventType]
 	if !ok {
 		w = &worker{
 			ctx:       dp.ctx,
-			eventType: task.eventType,
+			eventType: task.EventType,
 			queue:     make(chan *eventTask, dp.maxTaskSize),
 		}
 
-		dp.workers[task.eventType] = w
+		dp.workers[task.EventType] = w
 		go w.run()
 	}
 	defer dp.mu.Unlock()

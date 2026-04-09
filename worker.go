@@ -33,5 +33,5 @@ func (w *worker) execute(task *eventTask) {
 		fmt.Println("worker execute task fail: ", err.Error())
 	}
 
-	task.callback(task.task.msg.Offset, task.task.session)
+	task.callback(task.task.Msg.Offset, task.task.session)
 }

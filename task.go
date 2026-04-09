@@ -5,8 +5,8 @@ import (
 )
 
 type Task struct {
-	eventType string
-	msg       *sarama.ConsumerMessage
+	EventType string
+	Msg       *sarama.ConsumerMessage
 	session   sarama.ConsumerGroupSession
 }
 
