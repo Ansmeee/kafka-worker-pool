@@ -1,4 +1,4 @@
-package kafka_worker_pool
+package workerPool
 
 import (
 	"context"
@@ -86,7 +86,7 @@ func (wp *WorkerPool) Start() {
 }
 
 func (wp *WorkerPool) Stop() {
-	
+
 }
 
 func (wp *WorkerPool) dispatch(msg *sarama.ConsumerMessage, session sarama.ConsumerGroupSession) error {

@@ -1,4 +1,4 @@
-package kafka_worker_pool
+package workerPool
 
 import (
 	"context"

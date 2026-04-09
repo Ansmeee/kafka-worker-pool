@@ -1,4 +1,4 @@
-module kafka_worker_pool
+module kafka-worker-pool
 
 go 1.25.4
 
