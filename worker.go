@@ -37,7 +37,7 @@ func (w *worker) execute(task *eventTask) {
 		if err != nil {
 			task.callbackErr(task.task)
 		}
-		
+
 		task.callback(task.task.Msg.Offset, task.task.session)
 	}()
 
@@ -58,7 +58,7 @@ func (w *worker) retryBackoff(task *eventTask) error {
 		}
 
 		backOff := time.Duration(100*(1<<i)) * time.Millisecond
-		fmt.Printf("worker task retry %d after %d  \n", i, backOff)
+		fmt.Printf("worker task retry %d after %d ms  \n", i, backOff.Milliseconds())
 
 		time.Sleep(backOff)
 		if err := task.handler(task.task); err == nil {
