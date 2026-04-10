@@ -13,6 +13,7 @@ type partition struct {
 	partition     int32
 	topic         string
 	taskQueue     chan *Task
+	deadQueue     chan *Task
 	dispatcher    *dispatcher
 	offsetTracker *offsetTracker
 }
@@ -32,22 +33,26 @@ func (p *partition) consume() {
 		case <-p.ctx.Done():
 			for len(p.taskQueue) > 0 {
 				task := <-p.taskQueue
-				p.dispatcher.dispatch(task, p.onCompletion)
+				p.dispatcher.dispatch(task, p.onCompletion, p.onError)
 			}
 			return
 		case task := <-p.taskQueue:
-			p.dispatcher.dispatch(task, p.onCompletion)
+			p.dispatcher.dispatch(task, p.onCompletion, p.onError)
 		}
 	}
 }
 
-func (p *partition) onCompletion(offset int64, session sarama.ConsumerGroupSession, err error) {
-	if err != nil {
-		fmt.Println("consumer error:", err.Error())
-	}
-
+func (p *partition) onCompletion(offset int64, session sarama.ConsumerGroupSession) {
 	newOffset := p.offsetTracker.markDone(offset)
 	session.MarkOffset(p.topic, p.partition, newOffset+1, "")
+}
+
+func (p *partition) onError(task *Task) {
+	select {
+	case p.deadQueue <- task:
+	default:
+		fmt.Printf("dead queue is full, drop task %d, event %s, msg %v \n", task.Msg.Offset, task.EventType, task.Msg)
+	}
 }
 
 func (p *partition) generateTask(msg *sarama.ConsumerMessage, session sarama.ConsumerGroupSession) *Task {
@@ -104,7 +109,7 @@ func (ot *offsetTracker) markDone(offset int64) int64 {
 	return ot.committedOffset
 }
 
-func (dp *dispatcher) dispatch(task *Task, callback func(offset int64, session sarama.ConsumerGroupSession, err error)) {
+func (dp *dispatcher) dispatch(task *Task, callback func(offset int64, session sarama.ConsumerGroupSession), callbackErr func(task *Task)) {
 
 	dp.mu.Lock()
 	w, ok := dp.workers[task.EventType]
@@ -128,6 +133,6 @@ func (dp *dispatcher) dispatch(task *Task, callback func(offset int64, session s
 	select {
 	case <-dp.ctx.Done():
 		return
-	case w.queue <- &eventTask{task: task, handler: dp.handler, callback: callback}:
+	case w.queue <- &eventTask{task: task, handler: dp.handler, callback: callback, callbackErr: callbackErr}:
 	}
 }

@@ -11,7 +11,8 @@ type Task struct {
 }
 
 type eventTask struct {
-	task     *Task
-	handler  func(task *Task) error
-	callback func(offset int64, session sarama.ConsumerGroupSession, err error)
+	task        *Task
+	handler     func(task *Task) error
+	callback    func(offset int64, session sarama.ConsumerGroupSession)
+	callbackErr func(task *Task)
 }
